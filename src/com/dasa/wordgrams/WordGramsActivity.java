@@ -11,6 +11,7 @@ import android.graphics.Paint.Style;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.TextPaint;
+import android.view.Display;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -38,13 +39,17 @@ public class WordGramsActivity extends Activity {
 		private float mTileSize;
 		
 		private float mScreenWidth;
+		private float mScreenHeight;
 		
 		private long mDelta;
 
 		public GameView(Context context) {
 			super(context);
 			
-			mScreenWidth = WordGramsActivity.this.getWindowManager().getDefaultDisplay().getWidth();
+			Display display = WordGramsActivity.this.getWindowManager().getDefaultDisplay();
+			mScreenWidth = display.getWidth();
+			mScreenHeight = display.getHeight();
+			
 			mTileSize = (mScreenWidth)/mNumColumns;
 
 			mPaint = new Paint();
@@ -60,9 +65,14 @@ public class WordGramsActivity extends Activity {
 			
 			mBmTile = Utils.getBitmap(R.drawable.tile_bg_default, mTileSize);
 			
-			mWordTiles = new WordTiles[2];
-			mWordTiles[0] = new WordTiles("OPERANTS", null, mTileSize, 0, 0);
-			mWordTiles[1] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize);
+			mWordTiles = new WordTiles[7];
+			mWordTiles[0] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*0);
+			mWordTiles[1] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*1);
+			mWordTiles[2] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*2);
+			mWordTiles[3] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*3);
+			mWordTiles[4] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*4);
+			mWordTiles[5] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*5);
+			mWordTiles[6] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*6);
 			
 			getHolder().addCallback(this);
 		}
@@ -92,6 +102,8 @@ public class WordGramsActivity extends Activity {
 			for (WordTiles wordTiles : mWordTiles) {
 				wordTiles.onDraw(mDelta, canvas, mPaint, mTextPaint, mBmTile);
 			}
+			
+			drawFps(canvas);
 		}
 		
 		@Override public boolean onTouchEvent(MotionEvent event) {
@@ -99,6 +111,22 @@ public class WordGramsActivity extends Activity {
 				wordTiles.onTouchEvent(event);
 			}
 			return true;
+		}
+		
+		
+		
+		private long accum = 0;
+		private long lastDelta = 1;
+		private void drawFps(Canvas canvas) {
+			accum += mDelta;
+			if (accum > 500) {
+				accum = 0;
+				lastDelta = mDelta;
+			}
+			
+			mPaint.setColor(Color.WHITE);
+			mPaint.setTextSize(Utils.toDip(20));
+			canvas.drawText(String.format("%.2f", (float) (1000f/lastDelta)), 0, mScreenHeight-(mTileSize*2), mPaint);
 		}
 	}
 	

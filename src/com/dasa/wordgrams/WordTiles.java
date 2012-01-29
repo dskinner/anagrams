@@ -13,6 +13,8 @@ public class WordTiles {
 	private String[] mAnswers = new String[] {"OPERANTS", "PRONATES", "TROPANES", "PATERSON"};
 	private String[] mLetters = new String[] {"O", "P", "E", "R", "A", "N", "T", "S"};
 	
+	private float[][] mLetterPosOffset; // [index][x, y, duration]
+	
 	private float mViewPosX;
 	private float mViewPosY;
 	
@@ -32,6 +34,8 @@ public class WordTiles {
 		mTileSize = tileSize;
 		mViewPosX = viewPosX;
 		mViewPosY = viewPosY;
+		
+		mLetterPosOffset = new float[mLetters.length][3];
 	}
 	
 	public void onDraw(long delta, Canvas canvas, Paint paint, TextPaint textPaint, Bitmap bmTile) {
@@ -59,6 +63,19 @@ public class WordTiles {
 				textX += mDragDx;
 				textY += mDragDy;
 			}
+			
+			// animate tile movement
+			float[] posOffset = mLetterPosOffset[i];
+			posOffset[0] -= posOffset[0]/delta*2.5f;
+			posOffset[1] -= posOffset[1]/delta*2.5f;
+			
+			if (posOffset[0] > -1 && posOffset[0] < 1) posOffset[0] = 0;
+			if (posOffset[1] > -1 && posOffset[1] < 1) posOffset[1] = 0;
+			
+			bmX += posOffset[0];
+			bmY += posOffset[1];
+			textX += posOffset[0];
+			textY += posOffset[1];
 			
 			canvas.drawBitmap(bmTile, bmX, bmY, paint);
 			canvas.drawText(letter, textX, textY, textPaint);
@@ -94,14 +111,24 @@ public class WordTiles {
 				mLetters[mSelectIndex] = mLetters[swapIndex];
 				mLetters[swapIndex] = tmp;
 				
+				// refers to mSelectIndex since thats where the non-interacted
+				// tile will be at
+				if (swapIndex > mSelectIndex) mLetterPosOffset[mSelectIndex][0] += mTileSize;
+				if (swapIndex < mSelectIndex) mLetterPosOffset[mSelectIndex][0] -= mTileSize;
+				
+				// prevents tile being dragged from shifting draw position
+				// due to new index
 				if (swapIndex < mSelectIndex) mDragDx += mTileSize;
 				else mDragDx -= mTileSize;
 				
+				//
 				mSelectIndex = swapIndex;
 				
 				break;
 			case MotionEvent.ACTION_UP:
 				if (!mActionDown) break;
+				mLetterPosOffset[mSelectIndex][0] = mDragDx;
+				mLetterPosOffset[mSelectIndex][1] = mDragDy;
 				mActionDown = false;
 				checkAnswer();
 				break;
@@ -133,7 +160,7 @@ public class WordTiles {
 		
 		for (String answer : mAnswers) {
 			if (curWord.equals(answer)) {
-				App.toast("!!!!!!!!!!!!");
+				App.toast("!!! "+curWord+" !!!");
 				break;
 			}
 		}
