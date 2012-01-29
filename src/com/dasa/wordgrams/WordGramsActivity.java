@@ -3,11 +3,14 @@ package com.dasa.wordgrams;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Paint.Align;
 import android.graphics.Paint.Style;
+import android.graphics.Rect;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.TextPaint;
@@ -25,7 +28,10 @@ public class WordGramsActivity extends Activity {
 
 	public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 		
-		private static final float TEXT_SCALE = 0.6f;
+		private final int COLOR_BG = Color.parseColor("#057d9f");
+		private final float TEXT_SCALE = 0.6f;
+		
+		private Display mDisplay;
 		
 		private WordTiles[] mWordTiles;
 		
@@ -34,6 +40,7 @@ public class WordGramsActivity extends Activity {
 		private TextPaint mTextPaint;
 		
 		private Bitmap mBmTile;
+		private BitmapShader mShTile;
 		
 		private float mNumColumns = 8;
 		private float mTileSize;
@@ -46,9 +53,10 @@ public class WordGramsActivity extends Activity {
 		public GameView(Context context) {
 			super(context);
 			
-			Display display = WordGramsActivity.this.getWindowManager().getDefaultDisplay();
-			mScreenWidth = display.getWidth();
-			mScreenHeight = display.getHeight();
+			mDisplay = WordGramsActivity.this.getWindowManager().getDefaultDisplay();
+			
+			mScreenWidth = mDisplay.getWidth();
+			mScreenHeight = mDisplay.getHeight();
 			
 			mTileSize = (mScreenWidth)/mNumColumns;
 
@@ -64,15 +72,16 @@ public class WordGramsActivity extends Activity {
 			mTextPaint.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
 			
 			mBmTile = Utils.getBitmap(R.drawable.tile_bg_default, mTileSize);
+			mShTile = new BitmapShader(mBmTile, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP);
 			
-			mWordTiles = new WordTiles[7];
-			mWordTiles[0] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*0);
-			mWordTiles[1] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*1);
-			mWordTiles[2] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*2);
-			mWordTiles[3] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*3);
-			mWordTiles[4] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*4);
-			mWordTiles[5] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*5);
-			mWordTiles[6] = new WordTiles("OPERANTS", null, mTileSize, 0, mTileSize*6);
+			Rect bounds = new Rect();
+			mTextPaint.getTextBounds("A", 0, 1, bounds);
+			int textHeight = bounds.bottom-bounds.top;
+			
+			mWordTiles = new WordTiles[3];
+			mWordTiles[0] = new WordTiles("OPERANTS", null, mTileSize, textHeight, 0, mTileSize*0);
+			mWordTiles[1] = new WordTiles("OPERANTS", null, mTileSize, textHeight, 0, mTileSize*2);
+			mWordTiles[2] = new WordTiles("OPERANTS", null, mTileSize, textHeight, 0, mTileSize*4);
 			
 			getHolder().addCallback(this);
 		}
@@ -80,6 +89,8 @@ public class WordGramsActivity extends Activity {
 		@Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
 
 		@Override public void surfaceCreated(SurfaceHolder holder) {
+			//holder.setFormat(PixelFormat.RGBA_8888);
+			
 			mGameThread = new GameThread(this, holder);
 			mGameThread.start();
 		}
@@ -94,48 +105,27 @@ public class WordGramsActivity extends Activity {
 		}
 		
 		@Override protected void onDraw(Canvas canvas) {
-			
-			mPaint.setColor(Color.parseColor("#057d9f"));
-			mPaint.setStyle(Style.FILL);
-			canvas.drawPaint(mPaint);
+			canvas.drawColor(COLOR_BG);
 			
 			for (WordTiles wordTiles : mWordTiles) {
-				wordTiles.onDraw(mDelta, canvas, mPaint, mTextPaint, mBmTile);
+				wordTiles.onDraw(mDelta, canvas, mPaint, mTextPaint, mBmTile, mShTile);
 			}
-			
-			drawFps(canvas);
 		}
 		
 		@Override public boolean onTouchEvent(MotionEvent event) {
 			for (WordTiles wordTiles : mWordTiles) {
-				wordTiles.onTouchEvent(event);
+				if (wordTiles.onTouchEvent(event)) break;
 			}
 			return true;
-		}
-		
-		
-		
-		private long accum = 0;
-		private long lastDelta = 1;
-		private void drawFps(Canvas canvas) {
-			accum += mDelta;
-			if (accum > 500) {
-				accum = 0;
-				lastDelta = mDelta;
-			}
-			
-			mPaint.setColor(Color.WHITE);
-			mPaint.setTextSize(Utils.toDip(20));
-			canvas.drawText(String.format("%.2f", (float) (1000f/lastDelta)), 0, mScreenHeight-(mTileSize*2), mPaint);
 		}
 	}
 	
 	public class GameThread extends Thread {
+		private static final long TARGET_FPS = 1000/60;
 		
 		private GameView mView;
 		private SurfaceHolder mHolder;
 		private boolean mRunning;
-		private long mPrevTime;
 		
 		public GameThread(GameView view, SurfaceHolder holder) {
 			mView = view;
@@ -149,18 +139,30 @@ public class WordGramsActivity extends Activity {
 		
 		public void run() {
 			Canvas canvas;
+			long time;
+			long prevTime = 0;
+			long delta;
 			
 			while (mRunning) {
-				long time = System.currentTimeMillis();
+				time = System.currentTimeMillis();
+				delta = time-prevTime;
+				
+				if (delta < TARGET_FPS) {
+					try {
+						Thread.sleep(TARGET_FPS-delta);
+						time = System.currentTimeMillis();
+						delta = time-prevTime;
+					} catch (Exception e) {}
+				}
 				
 				canvas = mHolder.lockCanvas();
 				
 				if (canvas == null) continue;
 				
-				mView.onDraw(canvas, time-mPrevTime);
+				mView.onDraw(canvas, delta*TARGET_FPS/delta);
 				mHolder.unlockCanvasAndPost(canvas);
 				
-				mPrevTime = time;
+				prevTime = time;
 			}
 		}
 	}
