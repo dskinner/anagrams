@@ -1,30 +1,31 @@
 package com.dasa.wordgrams;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
-import android.text.TextPaint;
+import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.view.MotionEvent;
 
 public class WordTiles {
+	private final int COLOR_ROW_BG = Color.parseColor("#61b7cf");
 	
-	private String[] mAnswers = new String[] {"OPERANTS", "PRONATES", "TROPANES", "PATERSON"};
-	private char[] mLetters = new char[] {'O', 'P', 'E', 'R', 'A', 'N', 'T', 'S'};
+	private RectF mRectF;
+	
+	private String[] mAnswers;
+	private char[] mLetters;
 	
 	private float[][] mLetterPosOffset; // [index][x, y, duration]
 	float[] mTextPos;
 	
-	private float mViewPosX;
-	private float mViewPosY;
-	
+	//
 	private float mTileSize;
-	private float mTextHeightHalf;
+	private float mScreenPad;
+	
 	
 	private boolean mActionDown;
 	private int mSelectIndex;
 	
+	// MotionEvent
 	private float mPosX = 0;
 	private float mPosY = 50;
 	private float mPrevX;
@@ -32,22 +33,40 @@ public class WordTiles {
 	private float mDragDx;
 	private float mDragDy;
 	
-	public WordTiles(String word, String[] answers, float tileSize, float textHeight, float viewPosX, float viewPosY) {
-		mTileSize = tileSize;
-		mTextHeightHalf = textHeight/2;
-		mViewPosX = viewPosX;
-		mViewPosY = viewPosY;
-		
+	
+	//
+	float sx = 0;
+	float sy;
+	float mRot;
+	private Matrix mMatrix = new Matrix();
+	boolean b;
+	boolean b2;
+	
+	public WordTiles(String[] answers, CanvasContext cc) {
+		mAnswers = answers;
+		mLetters = mAnswers[0].toCharArray();
 		mLetterPosOffset = new float[mLetters.length][3];
-		mTextPos = new float[mLetters.length*2];
+		
+		mTileSize = cc.tileSize;
+		mScreenPad = cc.screenPad;
+		
+		mTextPos = new float[2];
+		mRectF = new RectF(
+				cc.screenPad,
+				cc.screenPad+cc.tileSize+cc.screenPad,
+				cc.screenWidth-cc.screenPad,
+				cc.screenHeight-cc.screenPad);
 	}
 	
-	public void onDraw(long delta, Canvas canvas, Paint paint, TextPaint textPaint, Bitmap bmTile, BitmapShader shTile) {
-		paint.setColor(Color.WHITE);
+	public void onDraw(Canvas canvas, CanvasContext cc) {
+		cc.paint.setColor(COLOR_ROW_BG);
+		canvas.drawRect(mRectF, cc.paint);
+		
+		cc.paint.setColor(Color.WHITE);
 		
 		for (int i=0; i<mLetters.length; ++i) {
-			float bmX = mViewPosX+(i*mTileSize);
-			float bmY = mViewPosY;
+			float bmX = cc.screenPad+(i*cc.tileSize);
+			float bmY = cc.screenPad;
 			
 			// adjust for dragging
 			if (mActionDown && (i == mSelectIndex)) {
@@ -57,8 +76,8 @@ public class WordTiles {
 			
 			// animate tile movement
 			float[] posOffset = mLetterPosOffset[i];
-			posOffset[0] -= posOffset[0]/delta*3f;
-			posOffset[1] -= posOffset[1]/delta*3f;
+			posOffset[0] -= posOffset[0]/cc.delta*3f;
+			posOffset[1] -= posOffset[1]/cc.delta*3f;
 			
 			if (posOffset[0] > -1 && posOffset[0] < 1) posOffset[0] = 0;
 			if (posOffset[1] > -1 && posOffset[1] < 1) posOffset[1] = 0;
@@ -66,19 +85,61 @@ public class WordTiles {
 			bmX += posOffset[0];
 			bmY += posOffset[1];
 			
-			//
-			float textX = bmX+(mTileSize/2);
-			float textY = bmY+(mTileSize/2)+(mTextHeightHalf);
+			mTextPos[0] = bmX+cc.tileSizeHalf;
+			mTextPos[1] = bmY+cc.tileSizeHalf+cc.textHeightHalf;
 			
-			canvas.drawBitmap(bmTile, bmX, bmY, paint);
-			
-			mTextPos[i*2] = textX;
-			mTextPos[i*2+1] = textY;
+			canvas.drawBitmap(cc.bmTile, bmX, bmY, cc.paint);
+			canvas.drawPosText(mLetters, i, 1, mTextPos, cc.textPaint);
 		}
 		
-		synchronized(mLetters) {
-			canvas.drawPosText(mLetters, 0, mLetters.length, mTextPos, textPaint);
+		
+		// TODO have star pause on full scale, but do a minor scale back and forward to make it pop/bounce
+		// before shrinking to bottom of screen
+		// testing star
+		if (b) {
+			sx += 0.0025*cc.delta;
+			mRot += 0.0025*cc.delta*360;
 		}
+		
+		if (mRot > 360) {
+			mRot = 360;
+			sx = 1;
+			b2 = true;
+			b = false;
+		}
+		
+		float y = cc.screenHeight/2f-cc.bmStarOn.getHeight()/2f;
+		
+		if (b2) {
+			sx -= 0.0025*cc.delta;
+			
+			
+			float diff = (cc.screenHeight-cc.bmStarOn.getHeight()/2f) - y;
+			
+			diff *= 1-sx;
+			y += diff;
+			
+			
+			if (sx < 0.2f) sx = .2f;
+		}
+		
+		mMatrix.setRotate(mRot, cc.bmStarOn.getWidth()/2f, cc.bmStarOn.getHeight()/2f);
+		mMatrix.postScale(sx, sx, cc.bmStarOn.getWidth()/2f, cc.bmStarOn.getHeight()/2f);
+		mMatrix.postTranslate(cc.screenWidth/2f-cc.bmStarOn.getWidth()/2f, y);
+		
+		if (b || b2) canvas.drawBitmap(cc.bmStarOn, mMatrix, cc.paint);
+		
+		/*
+		for (int i=0; i<mAnswers.length; ++i) {
+			int offset = 0;
+			if (i == 0) offset = -75;
+			if (i == 2) offset = 75;
+			Matrix m = new Matrix();
+			m.postScale(.2f, .2f);
+			m.postTranslate(cc.screenWidth/2+offset-(cc.bmStarOn.getWidth()*.2f/2), cc.screenHeight-100);
+			canvas.drawBitmap(cc.bmStarOn, m, cc.paint);
+		}
+		*/
 	}
 	
 	public boolean onTouchEvent(MotionEvent event) {
@@ -89,6 +150,9 @@ public class WordTiles {
 			case MotionEvent.ACTION_DOWN:
 				int index = gridHitTest(mPosX, mPosY);
 				if (index == -1) break;
+				
+				// gridHitTest performs poorly with screen padding
+				if (index >= mLetters.length) index = mLetters.length-1;
 				
 				mSelectIndex = index;
 				mDragDx = 0;
@@ -106,11 +170,11 @@ public class WordTiles {
 						|| swapIndex >= mLetters.length
 						|| swapIndex < 0) break;
 				
-				synchronized(mLetters) {
-					char tmp = mLetters[mSelectIndex];
-					mLetters[mSelectIndex] = mLetters[swapIndex];
-					mLetters[swapIndex] = tmp;
-				}
+				//synchronized(mLetters) {
+				char tmp = mLetters[mSelectIndex];
+				mLetters[mSelectIndex] = mLetters[swapIndex];
+				mLetters[swapIndex] = tmp;
+				//}
 				
 				// refers to mSelectIndex since thats where the non-interacted
 				// tile will be at
@@ -147,7 +211,7 @@ public class WordTiles {
 	}
 	
 	public int gridHitTest(float x, float y) {
-		if (y < mViewPosY+mTileSize && y > mViewPosY) return (int) ((x)/mTileSize);
+		if (y < mScreenPad+mTileSize && y > mScreenPad) return (int) ((x)/mTileSize);
 		
 		return -1;
 	}
@@ -162,7 +226,10 @@ public class WordTiles {
 		
 		for (String answer : mAnswers) {
 			if (curWord.equals(answer)) {
-				App.toast("!!! "+curWord+" !!!");
+				mRot = 0;
+				sx = 0;
+				b = true;
+				b2 = false;
 				break;
 			}
 		}
